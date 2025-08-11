@@ -5,7 +5,7 @@
 #
 # Notes:
 # - Y increases DOWN (top row is y=0). "Above" means y-1.
-# - Controls: Q=Sand, W=Water, E=Wall, T=Plant-dry, R=Eraser, C=clear, [ / ] brush size, Esc=quit
+# - Controls: Q=Sand, W=Water, E=Wall, T=Plant-dry, Y=Smoke, R=Eraser, C=clear, [ / ] brush size, Esc=quit
 # - Matches your plant rules:
 #   (1) Plant-dry -> Plant-wet if touching WATER and SAND simultaneously; consumes ONE adjacent WATER.
 #   (2) Plant-wet transposes with Plant-dry directly above (runs before sand/water).
@@ -36,7 +36,7 @@ STEPS_PER_FRAME = 2
 BRUSH_MIN, BRUSH_MAX = 1, 16
 
 # ---------- Materials ----------
-EMPTY, WALL, SAND, WATER, PLANT_DRY, PLANT_WET = 0, 1, 2, 3, 4, 5
+EMPTY, WALL, SAND, WATER, PLANT_DRY, PLANT_WET, SMOKE = 0, 1, 2, 3, 4, 5, 6
 
 PALETTE = np.array([
     [0.00, 0.00, 0.00],  # EMPTY
@@ -45,6 +45,7 @@ PALETTE = np.array([
     [0.30, 0.55, 0.95],  # WATER
     [0.20, 0.80, 0.25],  # PLANT_DRY
     [0.10, 0.55, 0.15],  # PLANT_WET
+    [0.60, 0.60, 0.60],  # SMOKE
 ], dtype=np.float32)
 
 MAT_NAME = {
@@ -54,6 +55,7 @@ MAT_NAME = {
     WALL: "Wall",
     PLANT_DRY: "Plant-dry",
     PLANT_WET: "Plant-wet",
+    SMOKE: "Smoke",
 }
 
 # ---------- Core simulation ----------
@@ -220,6 +222,37 @@ def step(grid: np.ndarray, grid_next: np.ndarray, kill_water: np.ndarray):
                         grid_next[y, x] = WATER
                 continue
 
+            if m == SMOKE:
+                moved = False
+                # up
+                if y - 1 >= 0 and grid[y - 1, x] == EMPTY and grid_next[y - 1, x] == EMPTY:
+                    grid_next[y - 1, x] = SMOKE
+                    moved = True
+                else:
+                    d = 1 if random.random() < 0.5 else -1
+                    nx = x + d
+                    # diagonals up
+                    if y - 1 >= 0 and 0 <= nx < W and grid[y - 1, nx] == EMPTY and grid_next[y - 1, nx] == EMPTY:
+                        grid_next[y - 1, nx] = SMOKE
+                        moved = True
+                    else:
+                        nx2 = x - d
+                        if y - 1 >= 0 and 0 <= nx2 < W and grid[y - 1, nx2] == EMPTY and grid_next[y - 1, nx2] == EMPTY:
+                            grid_next[y - 1, nx2] = SMOKE
+                            moved = True
+                        # sideways
+                        elif 0 <= nx < W and grid[y, nx] == EMPTY and grid_next[y, nx] == EMPTY:
+                            grid_next[y, nx] = SMOKE
+                            moved = True
+                        elif 0 <= nx2 < W and grid[y, nx2] == EMPTY and grid_next[y, nx2] == EMPTY:
+                            grid_next[y, nx2] = SMOKE
+                            moved = True
+
+                if not moved:
+                    if grid_next[y, x] == EMPTY:
+                        grid_next[y, x] = SMOKE
+                continue
+
     # commit
     for y in range(H):
         for x in range(W):
@@ -278,10 +311,12 @@ def main():
             current_mat = WATER
         elif keys[pygame.K_e]:
             current_mat = WALL
-        elif keys[pygame.K_r]:
-            current_mat = EMPTY
         elif keys[pygame.K_t]:
             current_mat = PLANT_DRY
+        elif keys[pygame.K_y]:
+            current_mat = SMOKE
+        elif keys[pygame.K_r]:
+            current_mat = EMPTY
 
         # Paint with mouse
         mx, my = pygame.mouse.get_pos()
@@ -306,7 +341,7 @@ def main():
 
         # HUD
         hud_lines = [
-            f"Material: {MAT_NAME.get(int(current_mat), 'Unknown')}  (Q:Sand W:Water E:Wall T:Plant R:Eraser)",
+            f"Material: {MAT_NAME.get(int(current_mat), 'Unknown')}  (Q:Sand W:Water E:Wall T:Plant Y:Smoke R:Eraser)",
             f"Brush: {brush_radius}  ([ / ])    Grid: {W}x{H}   Steps/frame: {STEPS_PER_FRAME}",
             "LMB paint  RMB erase  C clear  Esc quit",
         ]
