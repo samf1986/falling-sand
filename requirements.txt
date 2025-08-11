@@ -1,0 +1,4 @@
+numpy
+pygame
+# Optional JIT acceleration; simulator runs without it
+numba
