@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Falling Sand UI</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: ['class'],
+      theme: {
+        extend: {
+          colors: {
+            border: 'hsl(var(--border))',
+            input: 'hsl(var(--input))',
+            ring: 'hsl(var(--ring))',
+            background: 'hsl(var(--background))',
+            foreground: 'hsl(var(--foreground))',
+            primary: {
+              DEFAULT: 'hsl(var(--primary))',
+              foreground: 'hsl(var(--primary-foreground))',
+            },
+            secondary: {
+              DEFAULT: 'hsl(var(--secondary))',
+              foreground: 'hsl(var(--secondary-foreground))',
+            },
+          },
+        },
+      },
+    }
+  </script>
+  <style>
+    :root {
+      --background: 0 0% 100%;
+      --foreground: 240 10% 3.9%;
+      --primary: 240 5.9% 10%;
+      --primary-foreground: 0 0% 98%;
+      --secondary: 240 4.8% 95.9%;
+      --secondary-foreground: 240 5.9% 10%;
+      --border: 240 5.9% 90%;
+      --input: 240 5.9% 90%;
+      --ring: 240 5.9% 10%;
+    }
+  </style>
+</head>
+<body class="bg-background text-foreground">
+  <div class="flex h-screen">
+    <aside class="w-64 bg-secondary p-4">
+      <h2 class="text-lg font-bold mb-4">Sidebar</h2>
+      <nav class="space-y-2">
+        <a href="#" class="block hover:underline">Home</a>
+        <a href="#" class="block hover:underline">Settings</a>
+      </nav>
+    </aside>
+    <div class="flex-1 flex flex-col">
+      <header class="bg-secondary p-4 shadow">
+        <h1 class="text-xl font-semibold">Falling Sand</h1>
+      </header>
+      <main class="p-4 flex-1">
+        <button class="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-10 py-2 px-4">Shadcn Button</button>
+      </main>
+    </div>
+  </div>
+</body>
+</html>
