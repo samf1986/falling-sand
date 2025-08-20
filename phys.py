@@ -36,7 +36,9 @@ STEPS_PER_FRAME = 2
 BRUSH_MIN, BRUSH_MAX = 1, 16
 
 # ---------- Materials ----------
-EMPTY, WALL, SAND, WATER, PLANT_DRY, PLANT_WET, SMOKE, FIRE, STEAM = 0, 1, 2, 3, 4, 5, 6, 7, 8
+EMPTY, WALL, SAND, WATER, PLANT_DRY, PLANT_WET, SMOKE, FIRE, STEAM, ASH, TNT, FLASH = (
+    0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11
+)
 
 PALETTE = np.array([
     [0.00, 0.00, 0.00],  # EMPTY
@@ -48,6 +50,9 @@ PALETTE = np.array([
     [0.60, 0.60, 0.60],  # SMOKE
     [1.00, 0.30, 0.00],  # FIRE
     [0.85, 0.85, 0.90],  # STEAM
+    [0.40, 0.40, 0.40],  # ASH
+    [0.70, 0.00, 0.00],  # TNT
+    [1.00, 1.00, 0.20],  # FLASH
 ], dtype=np.float32)
 
 FIRE_LIFE_INIT = 5
@@ -63,6 +68,9 @@ MAT_NAME = {
     SMOKE: "Smoke",
     FIRE: "Fire",
     STEAM: "Steam",
+    ASH: "Ash",
+    TNT: "TNT",
+    FLASH: "Flash",
 }
 
 # ---------- Core simulation ----------
@@ -182,13 +190,36 @@ def step(grid: np.ndarray, grid_next: np.ndarray, kill_water: np.ndarray,
                 # already handled or static
                 continue
 
-            if m == SAND:
+            if m == TNT:
+                explode = False
+                for dy in (-1, 0, 1):
+                    for dx in (-1, 0, 1):
+                        if dx == 0 and dy == 0:
+                            continue
+                        nx = x + dx
+                        ny = y + dy
+                        if not in_bounds(nx, ny, W, H):
+                            continue
+                        n = grid[ny, nx]
+                        if n == FIRE or n == FLASH:
+                            explode = True
+                            break
+                    if explode:
+                        break
+                if explode:
+                    paint_circle(grid_next, x, y, 25, np.uint8(FLASH))
+                else:
+                    grid_next[y, x] = TNT
+                continue
+
+            if m == SAND or m == ASH:
+                mat = m
                 moved = False
                 # down (y+1)
                 if y + 1 < H:
                     below = grid[y + 1, x]
                     if (below == EMPTY or is_gas(below)) and grid_next[y + 1, x] == EMPTY:
-                        grid_next[y + 1, x] = SAND
+                        grid_next[y + 1, x] = mat
                         if is_gas(below):
                             grid_next[y, x] = below
                             if below == STEAM:
@@ -201,7 +232,7 @@ def step(grid: np.ndarray, grid_next: np.ndarray, kill_water: np.ndarray,
                     if y + 1 < H and 0 <= nx < W:
                         below = grid[y + 1, nx]
                         if (below == EMPTY or is_gas(below)) and grid_next[y + 1, nx] == EMPTY:
-                            grid_next[y + 1, nx] = SAND
+                            grid_next[y + 1, nx] = mat
                             if is_gas(below):
                                 grid_next[y, x] = below
                                 if below == STEAM:
@@ -212,7 +243,7 @@ def step(grid: np.ndarray, grid_next: np.ndarray, kill_water: np.ndarray,
                             if y + 1 < H and 0 <= nx2 < W:
                                 below2 = grid[y + 1, nx2]
                                 if (below2 == EMPTY or is_gas(below2)) and grid_next[y + 1, nx2] == EMPTY:
-                                    grid_next[y + 1, nx2] = SAND
+                                    grid_next[y + 1, nx2] = mat
                                     if is_gas(below2):
                                         grid_next[y, x] = below2
                                         if below2 == STEAM:
@@ -221,7 +252,7 @@ def step(grid: np.ndarray, grid_next: np.ndarray, kill_water: np.ndarray,
 
                 if not moved:
                     if grid_next[y, x] == EMPTY:
-                        grid_next[y, x] = SAND
+                        grid_next[y, x] = mat
                 continue
 
             if m == WATER:
@@ -346,6 +377,11 @@ def step(grid: np.ndarray, grid_next: np.ndarray, kill_water: np.ndarray,
                         grid_next[y, x] = SMOKE
                 continue
 
+            if m == FLASH:
+                grid_next[y, x] = FIRE
+                fire_life_next[y, x] = 1
+                continue
+
             if m == STEAM:
                 life = steam_life[y, x] - 1
                 moved = False
@@ -395,6 +431,9 @@ def step(grid: np.ndarray, grid_next: np.ndarray, kill_water: np.ndarray,
                 continue
 
             if m == SMOKE:
+                if random.random() < 0.01:
+                    grid_next[y, x] = ASH
+                    continue
                 moved = False
                 if y - 1 >= 0:
                     above = grid[y - 1, x]
@@ -510,6 +549,8 @@ def main():
             current_mat = SMOKE
         elif keys[pygame.K_f]:
             current_mat = FIRE
+        elif keys[pygame.K_g]:
+            current_mat = TNT
         elif keys[pygame.K_r]:
             current_mat = EMPTY
 
@@ -545,7 +586,7 @@ def main():
 
         # HUD
         hud_lines = [
-            f"Material: {MAT_NAME.get(int(current_mat), 'Unknown')}  (Q:Sand W:Water E:Wall T:Plant Y:Smoke F:Fire R:Eraser)",
+            f"Material: {MAT_NAME.get(int(current_mat), 'Unknown')}  (Q:Sand W:Water E:Wall T:Plant Y:Smoke F:Fire G:TNT R:Eraser)",
             f"Brush: {brush_radius}  ([ / ])    Grid: {W}x{H}   Steps/frame: {STEPS_PER_FRAME}",
             "LMB paint  RMB erase  C clear  Esc quit",
         ]
