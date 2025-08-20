@@ -5,7 +5,7 @@
 #
 # Notes:
 # - Y increases DOWN (top row is y=0). "Above" means y-1.
-# - Controls: Q=Sand, W=Water, E=Wall, T=Plant-dry, Y=Smoke, F=Fire, R=Eraser, C=clear, [ / ] brush size, Esc=quit
+# - Controls: Q=Sand, W=Water, E=Wall, T=Plant-dry, Y=Smoke, F=Fire, L=Lava, R=Eraser, C=clear, [ / ] brush size, Esc=quit
 # - Matches your plant rules:
 #   (1) Plant-dry -> Plant-wet if touching WATER and SAND simultaneously; consumes ONE adjacent WATER.
 #   (2) Plant-wet transposes with Plant-dry directly above (runs before sand/water).
@@ -36,8 +36,8 @@ STEPS_PER_FRAME = 2
 BRUSH_MIN, BRUSH_MAX = 1, 16
 
 # ---------- Materials ----------
-EMPTY, WALL, SAND, WATER, PLANT_DRY, PLANT_WET, SMOKE, FIRE, STEAM, ASH, TNT, FLASH = (
-    0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11
+EMPTY, WALL, SAND, WATER, PLANT_DRY, PLANT_WET, SMOKE, FIRE, STEAM, ASH, TNT, FLASH, LAVA = (
+    0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12
 )
 
 PALETTE = np.array([
@@ -53,6 +53,7 @@ PALETTE = np.array([
     [0.40, 0.40, 0.40],  # ASH
     [0.70, 0.00, 0.00],  # TNT
     [1.00, 1.00, 0.20],  # FLASH
+    [0.85, 0.35, 0.05],  # LAVA
 ], dtype=np.float32)
 
 FIRE_LIFE_INIT = 5
@@ -71,6 +72,7 @@ MAT_NAME = {
     ASH: "Ash",
     TNT: "TNT",
     FLASH: "Flash",
+    LAVA: "Lava",
 }
 
 # ---------- Core simulation ----------
@@ -321,6 +323,53 @@ def step(grid: np.ndarray, grid_next: np.ndarray, kill_water: np.ndarray,
                         grid_next[y, x] = WATER
                 continue
 
+            if m == LAVA:
+                solidify = False
+                touching_wall = False
+                for dy in (-1, 0, 1):
+                    for dx in (-1, 0, 1):
+                        if dx == 0 and dy == 0:
+                            continue
+                        nx = x + dx
+                        ny = y + dy
+                        if not in_bounds(nx, ny, W, H):
+                            continue
+                        n = grid[ny, nx]
+                        if n == WATER:
+                            solidify = True
+                            grid_next[ny, nx] = WALL
+                        elif n == PLANT_DRY or n == PLANT_WET:
+                            grid_next[ny, nx] = FIRE
+                            fire_life_next[ny, nx] = FIRE_LIFE_INIT
+                        elif n == WALL:
+                            touching_wall = True
+                if solidify or (touching_wall and random.random() < 0.01):
+                    grid_next[y, x] = WALL
+                    continue
+                moved = False
+                d = 1 if random.random() < 0.5 else -1
+                nx = x + d
+                nx2 = x - d
+                if y + 1 < H and grid[y + 1, x] == EMPTY and grid_next[y + 1, x] == EMPTY:
+                    grid_next[y + 1, x] = LAVA
+                    moved = True
+                if not moved and y + 1 < H and 0 <= nx < W and grid[y + 1, nx] == EMPTY and grid_next[y + 1, nx] == EMPTY:
+                    grid_next[y + 1, nx] = LAVA
+                    moved = True
+                if not moved and y + 1 < H and 0 <= nx2 < W and grid[y + 1, nx2] == EMPTY and grid_next[y + 1, nx2] == EMPTY:
+                    grid_next[y + 1, nx2] = LAVA
+                    moved = True
+                if not moved:
+                    if 0 <= nx < W and grid[y, nx] == EMPTY and grid_next[y, nx] == EMPTY:
+                        grid_next[y, nx] = LAVA
+                        moved = True
+                    elif 0 <= nx2 < W and grid[y, nx2] == EMPTY and grid_next[y, nx2] == EMPTY:
+                        grid_next[y, nx2] = LAVA
+                        moved = True
+                if not moved and grid_next[y, x] == EMPTY:
+                    grid_next[y, x] = LAVA
+                continue
+
             if m == FIRE:
                 life = fire_life[y, x] - 1
                 extinguished = False
@@ -431,7 +480,7 @@ def step(grid: np.ndarray, grid_next: np.ndarray, kill_water: np.ndarray,
                 continue
 
             if m == SMOKE:
-                if random.random() < 0.01:
+                if random.random() < 0.25:
                     grid_next[y, x] = ASH
                     continue
                 moved = False
@@ -549,6 +598,8 @@ def main():
             current_mat = SMOKE
         elif keys[pygame.K_f]:
             current_mat = FIRE
+        elif keys[pygame.K_l]:
+            current_mat = LAVA
         elif keys[pygame.K_g]:
             current_mat = TNT
         elif keys[pygame.K_r]:
@@ -586,7 +637,7 @@ def main():
 
         # HUD
         hud_lines = [
-            f"Material: {MAT_NAME.get(int(current_mat), 'Unknown')}  (Q:Sand W:Water E:Wall T:Plant Y:Smoke F:Fire G:TNT R:Eraser)",
+            f"Material: {MAT_NAME.get(int(current_mat), 'Unknown')}  (Q:Sand W:Water E:Wall T:Plant Y:Smoke F:Fire L:Lava G:TNT R:Eraser)",
             f"Brush: {brush_radius}  ([ / ])    Grid: {W}x{H}   Steps/frame: {STEPS_PER_FRAME}",
             "LMB paint  RMB erase  C clear  Esc quit",
         ]
