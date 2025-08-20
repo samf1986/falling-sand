@@ -71,6 +71,11 @@ def in_bounds(x: int, y: int, W: int, H: int) -> bool:
     return 0 <= x < W and 0 <= y < H
 
 @njit(cache=True, fastmath=True)
+def is_gas(m: int) -> bool:
+    """Return True if the material is a gas."""
+    return m == SMOKE or m == STEAM
+
+@njit(cache=True, fastmath=True)
 def paint_circle(grid: np.ndarray, cx: int, cy: int, r: int, mat: np.uint8):
     H, W = grid.shape[0], grid.shape[1]  # careful: we store as [H,W]
     r2 = r * r
@@ -180,21 +185,39 @@ def step(grid: np.ndarray, grid_next: np.ndarray, kill_water: np.ndarray,
             if m == SAND:
                 moved = False
                 # down (y+1)
-                if y + 1 < H and grid[y + 1, x] == EMPTY and grid_next[y + 1, x] == EMPTY:
-                    grid_next[y + 1, x] = SAND
-                    moved = True
-                else:
+                if y + 1 < H:
+                    below = grid[y + 1, x]
+                    if (below == EMPTY or is_gas(below)) and grid_next[y + 1, x] == EMPTY:
+                        grid_next[y + 1, x] = SAND
+                        if is_gas(below):
+                            grid_next[y, x] = below
+                            if below == STEAM:
+                                steam_life_next[y, x] = steam_life[y + 1, x]
+                        moved = True
+                if not moved:
                     # diagonals (random order to reduce bias)
                     d = 1 if random.random() < 0.5 else -1
                     nx = x + d
-                    if y + 1 < H and 0 <= nx < W and grid[y + 1, nx] == EMPTY and grid_next[y + 1, nx] == EMPTY:
-                        grid_next[y + 1, nx] = SAND
-                        moved = True
-                    else:
-                        nx2 = x - d
-                        if y + 1 < H and 0 <= nx2 < W and grid[y + 1, nx2] == EMPTY and grid_next[y + 1, nx2] == EMPTY:
-                            grid_next[y + 1, nx2] = SAND
+                    if y + 1 < H and 0 <= nx < W:
+                        below = grid[y + 1, nx]
+                        if (below == EMPTY or is_gas(below)) and grid_next[y + 1, nx] == EMPTY:
+                            grid_next[y + 1, nx] = SAND
+                            if is_gas(below):
+                                grid_next[y, x] = below
+                                if below == STEAM:
+                                    steam_life_next[y, x] = steam_life[y + 1, nx]
                             moved = True
+                        else:
+                            nx2 = x - d
+                            if y + 1 < H and 0 <= nx2 < W:
+                                below2 = grid[y + 1, nx2]
+                                if (below2 == EMPTY or is_gas(below2)) and grid_next[y + 1, nx2] == EMPTY:
+                                    grid_next[y + 1, nx2] = SAND
+                                    if is_gas(below2):
+                                        grid_next[y, x] = below2
+                                        if below2 == STEAM:
+                                            steam_life_next[y, x] = steam_life[y + 1, nx2]
+                                    moved = True
 
                 if not moved:
                     if grid_next[y, x] == EMPTY:
@@ -223,29 +246,44 @@ def step(grid: np.ndarray, grid_next: np.ndarray, kill_water: np.ndarray,
                     steam_life_next[y, x] = STEAM_LIFE_INIT
                     continue
                 moved = False
+                d = 1 if random.random() < 0.5 else -1
+                nx = x + d
+                nx2 = x - d
                 # down
-                if y + 1 < H and grid[y + 1, x] == EMPTY and grid_next[y + 1, x] == EMPTY:
-                    grid_next[y + 1, x] = WATER
-                    moved = True
-                else:
-                    d = 1 if random.random() < 0.5 else -1
-                    nx = x + d
-                    # diagonals down
-                    if y + 1 < H and 0 <= nx < W and grid[y + 1, nx] == EMPTY and grid_next[y + 1, nx] == EMPTY:
-                        grid_next[y + 1, nx] = WATER
+                if y + 1 < H:
+                    below = grid[y + 1, x]
+                    if (below == EMPTY or is_gas(below)) and grid_next[y + 1, x] == EMPTY:
+                        grid_next[y + 1, x] = WATER
+                        if is_gas(below):
+                            grid_next[y, x] = below
+                            if below == STEAM:
+                                steam_life_next[y, x] = steam_life[y + 1, x]
                         moved = True
-                    else:
-                        nx2 = x - d
-                        if y + 1 < H and 0 <= nx2 < W and grid[y + 1, nx2] == EMPTY and grid_next[y + 1, nx2] == EMPTY:
-                            grid_next[y + 1, nx2] = WATER
-                            moved = True
-                        # sideways
-                        elif 0 <= nx < W and grid[y, nx] == EMPTY and grid_next[y, nx] == EMPTY:
-                            grid_next[y, nx] = WATER
-                            moved = True
-                        elif 0 <= nx2 < W and grid[y, nx2] == EMPTY and grid_next[y, nx2] == EMPTY:
-                            grid_next[y, nx2] = WATER
-                            moved = True
+                if not moved and y + 1 < H and 0 <= nx < W:
+                    below = grid[y + 1, nx]
+                    if (below == EMPTY or is_gas(below)) and grid_next[y + 1, nx] == EMPTY:
+                        grid_next[y + 1, nx] = WATER
+                        if is_gas(below):
+                            grid_next[y, x] = below
+                            if below == STEAM:
+                                steam_life_next[y, x] = steam_life[y + 1, nx]
+                        moved = True
+                if not moved and y + 1 < H and 0 <= nx2 < W:
+                    below2 = grid[y + 1, nx2]
+                    if (below2 == EMPTY or is_gas(below2)) and grid_next[y + 1, nx2] == EMPTY:
+                        grid_next[y + 1, nx2] = WATER
+                        if is_gas(below2):
+                            grid_next[y, x] = below2
+                            if below2 == STEAM:
+                                steam_life_next[y, x] = steam_life[y + 1, nx2]
+                        moved = True
+                if not moved:
+                    if 0 <= nx < W and grid[y, nx] == EMPTY and grid_next[y, nx] == EMPTY:
+                        grid_next[y, nx] = WATER
+                        moved = True
+                    elif 0 <= nx2 < W and grid[y, nx2] == EMPTY and grid_next[y, nx2] == EMPTY:
+                        grid_next[y, nx2] = WATER
+                        moved = True
 
                 if not moved:
                     if grid_next[y, x] == EMPTY:
@@ -311,31 +349,43 @@ def step(grid: np.ndarray, grid_next: np.ndarray, kill_water: np.ndarray,
             if m == STEAM:
                 life = steam_life[y, x] - 1
                 moved = False
-                if y - 1 >= 0 and grid[y - 1, x] == EMPTY and grid_next[y - 1, x] == EMPTY:
-                    grid_next[y - 1, x] = STEAM
-                    steam_life_next[y - 1, x] = life
-                    moved = True
-                else:
+                if y - 1 >= 0:
+                    above = grid[y - 1, x]
+                    if (above == EMPTY or above == WATER) and grid_next[y - 1, x] == EMPTY:
+                        grid_next[y - 1, x] = STEAM
+                        steam_life_next[y - 1, x] = life
+                        if above == WATER:
+                            grid_next[y, x] = WATER
+                        moved = True
+                if not moved:
                     d = 1 if random.random() < 0.5 else -1
                     nx = x + d
-                    if y - 1 >= 0 and 0 <= nx < W and grid[y - 1, nx] == EMPTY and grid_next[y - 1, nx] == EMPTY:
-                        grid_next[y - 1, nx] = STEAM
-                        steam_life_next[y - 1, nx] = life
-                        moved = True
-                    else:
-                        nx2 = x - d
-                        if y - 1 >= 0 and 0 <= nx2 < W and grid[y - 1, nx2] == EMPTY and grid_next[y - 1, nx2] == EMPTY:
-                            grid_next[y - 1, nx2] = STEAM
-                            steam_life_next[y - 1, nx2] = life
+                    if y - 1 >= 0 and 0 <= nx < W:
+                        above = grid[y - 1, nx]
+                        if (above == EMPTY or above == WATER) and grid_next[y - 1, nx] == EMPTY:
+                            grid_next[y - 1, nx] = STEAM
+                            steam_life_next[y - 1, nx] = life
+                            if above == WATER:
+                                grid_next[y, x] = WATER
                             moved = True
-                        elif 0 <= nx < W and grid[y, nx] == EMPTY and grid_next[y, nx] == EMPTY:
-                            grid_next[y, nx] = STEAM
-                            steam_life_next[y, nx] = life
-                            moved = True
-                        elif 0 <= nx2 < W and grid[y, nx2] == EMPTY and grid_next[y, nx2] == EMPTY:
-                            grid_next[y, nx2] = STEAM
-                            steam_life_next[y, nx2] = life
-                            moved = True
+                        else:
+                            nx2 = x - d
+                            if y - 1 >= 0 and 0 <= nx2 < W:
+                                above2 = grid[y - 1, nx2]
+                                if (above2 == EMPTY or above2 == WATER) and grid_next[y - 1, nx2] == EMPTY:
+                                    grid_next[y - 1, nx2] = STEAM
+                                    steam_life_next[y - 1, nx2] = life
+                                    if above2 == WATER:
+                                        grid_next[y, x] = WATER
+                                    moved = True
+                                elif 0 <= nx < W and grid[y, nx] == EMPTY and grid_next[y, nx] == EMPTY:
+                                    grid_next[y, nx] = STEAM
+                                    steam_life_next[y, nx] = life
+                                    moved = True
+                                elif 0 <= nx2 < W and grid[y, nx2] == EMPTY and grid_next[y, nx2] == EMPTY:
+                                    grid_next[y, nx2] = STEAM
+                                    steam_life_next[y, nx2] = life
+                                    moved = True
                 if not moved:
                     if life > 0:
                         grid_next[y, x] = STEAM
@@ -346,30 +396,39 @@ def step(grid: np.ndarray, grid_next: np.ndarray, kill_water: np.ndarray,
 
             if m == SMOKE:
                 moved = False
-                # up
-                if y - 1 >= 0 and grid[y - 1, x] == EMPTY and grid_next[y - 1, x] == EMPTY:
-                    grid_next[y - 1, x] = SMOKE
-                    moved = True
-                else:
+                if y - 1 >= 0:
+                    above = grid[y - 1, x]
+                    if (above == EMPTY or above == WATER) and grid_next[y - 1, x] == EMPTY:
+                        grid_next[y - 1, x] = SMOKE
+                        if above == WATER:
+                            grid_next[y, x] = WATER
+                        moved = True
+                if not moved:
                     d = 1 if random.random() < 0.5 else -1
                     nx = x + d
-                    # diagonals up
-                    if y - 1 >= 0 and 0 <= nx < W and grid[y - 1, nx] == EMPTY and grid_next[y - 1, nx] == EMPTY:
-                        grid_next[y - 1, nx] = SMOKE
-                        moved = True
-                    else:
-                        nx2 = x - d
-                        if y - 1 >= 0 and 0 <= nx2 < W and grid[y - 1, nx2] == EMPTY and grid_next[y - 1, nx2] == EMPTY:
-                            grid_next[y - 1, nx2] = SMOKE
+                    if y - 1 >= 0 and 0 <= nx < W:
+                        above = grid[y - 1, nx]
+                        if (above == EMPTY or above == WATER) and grid_next[y - 1, nx] == EMPTY:
+                            grid_next[y - 1, nx] = SMOKE
+                            if above == WATER:
+                                grid_next[y, x] = WATER
                             moved = True
-                        # sideways
-                        elif 0 <= nx < W and grid[y, nx] == EMPTY and grid_next[y, nx] == EMPTY:
-                            grid_next[y, nx] = SMOKE
-                            moved = True
-                        elif 0 <= nx2 < W and grid[y, nx2] == EMPTY and grid_next[y, nx2] == EMPTY:
-                            grid_next[y, nx2] = SMOKE
-                            moved = True
-
+                        else:
+                            nx2 = x - d
+                            if y - 1 >= 0 and 0 <= nx2 < W:
+                                above2 = grid[y - 1, nx2]
+                                if (above2 == EMPTY or above2 == WATER) and grid_next[y - 1, nx2] == EMPTY:
+                                    grid_next[y - 1, nx2] = SMOKE
+                                    if above2 == WATER:
+                                        grid_next[y, x] = WATER
+                                    moved = True
+                                # sideways
+                                elif 0 <= nx < W and grid[y, nx] == EMPTY and grid_next[y, nx] == EMPTY:
+                                    grid_next[y, nx] = SMOKE
+                                    moved = True
+                                elif 0 <= nx2 < W and grid[y, nx2] == EMPTY and grid_next[y, nx2] == EMPTY:
+                                    grid_next[y, nx2] = SMOKE
+                                    moved = True
                 if not moved:
                     if grid_next[y, x] == EMPTY:
                         grid_next[y, x] = SMOKE
